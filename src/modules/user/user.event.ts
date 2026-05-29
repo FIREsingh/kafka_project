@@ -14,7 +14,7 @@ export type UserEventPayload = {
   timestamp: string;
 };
 
-const TOPIC = "user-events";
+export const USER_EVENTS_TOPIC = "user-events";
 
 export const publishUserEvent = async (
   event: UserEventName,
@@ -23,7 +23,7 @@ export const publishUserEvent = async (
   const producer = await getProducer();
 
   await producer.send({
-    topic: TOPIC,
+    topic: USER_EVENTS_TOPIC,
     messages: [
       {
         key: payload.user.id,
