@@ -1,4 +1,4 @@
-import { getConsumer } from "../../config/kafka.ts";
+import { getConsumer, type GetConsumerOptions } from "../../config/kafka.ts";
 import {
   USER_EVENTS_TOPIC,
   type UserEventName,
@@ -9,27 +9,44 @@ type UserEventMessage = UserEventPayload & {
   event: UserEventName;
 };
 
-export const startUserEventsConsumer = async (): Promise<void> => {
-  const consumer = await getConsumer();
+export type UserConsumerOptions = {
+  consumer?: GetConsumerOptions;
+  fromBeginning?: boolean;
+  partitionsConsumedConcurrently?: number;
+};
 
-  await consumer.subscribe({ topic: USER_EVENTS_TOPIC, fromBeginning: false });
+export const startUserEventsConsumer = async (
+  options: UserConsumerOptions = {},
+): Promise<void> => {
+  const {
+    consumer: consumerOptions = {
+      groupId:
+        process.env.USER_EVENTS_CONSUMER_GROUP_ID ?? "user-events-consumer",
+    },
+    fromBeginning = process.env.KAFKA_CONSUMER_FROM_BEGINNING === "true",
+    partitionsConsumedConcurrently = Number(
+      process.env.KAFKA_PARTITIONS_CONCURRENT ?? "1",
+    ),
+  } = options;
+
+  const consumer = await getConsumer(consumerOptions);
+
+  await consumer.subscribe({ topic: USER_EVENTS_TOPIC, fromBeginning });
 
   await consumer.run({
     autoCommit: false,
+    partitionsConsumedConcurrently,
     eachMessage: async ({ topic, partition, message }) => {
       if (!message.value) return;
 
       try {
         const parsed = JSON.parse(message.value.toString()) as UserEventMessage;
-        console.log(`[kafka:consume] ${parsed.event}`, JSON.stringify(parsed));
+        console.log(`Consumed`, JSON.stringify(parsed), "partition", partition);
 
         const nextOffset = (BigInt(message.offset) + 1n).toString();
         await consumer.commitOffsets([
           { topic, partition, offset: nextOffset },
         ]);
-        console.log("nextOffset", nextOffset);
-        console.log("partition", partition);
-        console.log("topic", topic);
       } catch (error) {
         console.error("[kafka:consume] Failed to process message", error);
       }
